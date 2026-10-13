@@ -22,7 +22,10 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-vector-icons/ionicons"
+      "@react-native-vector-icons/ionicons",
+      "expo-sqlite",
+      "expo-router",
+      "expo-secure-store"
     ]
   }
 }
