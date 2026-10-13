@@ -1,12 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { router } from 'expo-router';
 
-// Ajustá la ruta según tu carpeta de servicios
-import { guardarToken, obtenerToken, borrarToken, autenticarConBiometria } from '../servicios/autenticacion';
+// Servicios de autenticación
+import {
+  guardarToken,
+  obtenerToken,
+  borrarToken,
+  autenticarConBiometria,
+  guardarUsuario,
+  obtenerUsuario,
+  Usuario,
+} from '../servicios/autenticacion';
 
 const loginSchema = z.object({
   email: z.string().email('Ingresá un correo electrónico válido'),
@@ -18,8 +37,13 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginPantalla() {
   const [cargando, setCargando] = useState<boolean>(true);
   const [haySesion, setHaySesion] = useState<boolean>(false);
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
 
-  const { control, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
 
@@ -31,8 +55,13 @@ export default function LoginPantalla() {
   const verificarSesion = async () => {
     try {
       const token = await obtenerToken();
+      const datosUsuario = await obtenerUsuario();
+
       if (token) {
         setHaySesion(true);
+        setUsuario(
+          datosUsuario || { nombre: 'Turista', email: 'turista@colon.gob.ar' }
+        );
       } else {
         setHaySesion(false);
       }
@@ -44,20 +73,50 @@ export default function LoginPantalla() {
   };
 
   const onSubmit = async (data: LoginFormData) => {
-    if (data.email === 'turista@colon.gob.ar' && data.password === '123456') {
-      await guardarToken('mock_jwt_token_12345');
+    const usuarioGuardado = await obtenerUsuario();
+
+    // Verificamos si coincide el email Y contraseña guardados o la cuenta demo
+    const esUsuarioRegistrado =
+      usuarioGuardado &&
+      usuarioGuardado.email.toLowerCase() === data.email.toLowerCase() &&
+      (!usuarioGuardado.password || data.password === usuarioGuardado.password);
+
+    const esCuentaDemo =
+      data.email === 'turista@colon.gob.ar' && data.password === '123456';
+
+    if (esUsuarioRegistrado || esCuentaDemo) {
+      const nombreSesion = esUsuarioRegistrado
+        ? usuarioGuardado.nombre
+        : 'Turista en Colón';
+      const emailSesion = esUsuarioRegistrado
+        ? usuarioGuardado.email
+        : 'turista@colon.gob.ar';
+
+      await guardarToken(`mock_jwt_token_${Date.now()}`);
+      await guardarUsuario({ nombre: nombreSesion, email: emailSesion });
+
       setHaySesion(true);
+      setUsuario({ nombre: nombreSesion, email: emailSesion });
+
+      Alert.alert('¡Bienvenido/a!', `Sesión iniciada como ${nombreSesion}`);
       router.replace('/');
     } else {
-      Alert.alert('Error', 'Credenciales incorrectas');
+      Alert.alert(
+        'Error',
+        'Credenciales incorrectas. Verificá el correo y la contraseña.'
+      );
     }
   };
 
   const handleProbarBiometria = async () => {
     const exito = await autenticarConBiometria();
     if (exito) {
-      await guardarToken('mock_jwt_token_12345');
+      await guardarToken(`mock_jwt_token_${Date.now()}`);
+      const datosUsuario = await obtenerUsuario();
       setHaySesion(true);
+      setUsuario(
+        datosUsuario || { nombre: 'Turista', email: 'turista@colon.gob.ar' }
+      );
       router.replace('/');
     }
   };
@@ -65,13 +124,14 @@ export default function LoginPantalla() {
   const handleCerrarSesion = async () => {
     await borrarToken();
     setHaySesion(false);
+    setUsuario(null);
     Alert.alert('Sesión cerrada', 'Has cerrado sesión correctamente');
   };
 
   if (cargando) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#0284c7" />
       </View>
     );
   }
@@ -82,15 +142,32 @@ export default function LoginPantalla() {
       <View style={styles.container}>
         <View style={styles.profileCard}>
           <Text style={styles.avatar}>👤</Text>
-          <Text style={styles.titulo}>¡Hola, Turista!</Text>
-          <Text style={styles.emailText}>turista@colon.gob.ar</Text>
+          <Text style={styles.titulo}>
+            ¡Hola, {usuario?.nombre || 'Turista'}!
+          </Text>
+          <Text style={styles.emailText}>
+            {usuario?.email || 'turista@colon.gob.ar'}
+          </Text>
           <Text style={styles.statusBadge}>✓ Sesión Activa</Text>
         </View>
 
-        <Pressable style={styles.botonCatalogo} onPress={() => router.replace('/')}>
+        {/* Ir al Catálogo */}
+        <Pressable
+          style={styles.botonIngresar}
+          onPress={() => router.replace('/')}
+        >
           <Text style={styles.botonTexto}>Ir al Catálogo de Atractivos</Text>
         </Pressable>
 
+        {/* ⚙️ Botón para ir a Mi Perfil / Preferencias (SQLite) */}
+        <Pressable
+          style={styles.botonPerfil}
+          onPress={() => router.push('/perfil')}
+        >
+          <Text style={styles.botonTextoPerfil}>⚙️ Mi Perfil y Preferencias</Text>
+        </Pressable>
+
+        {/* Cerrar Sesión */}
         <Pressable style={styles.botonCerrar} onPress={handleCerrarSesion}>
           <Text style={styles.botonTextoCerrar}>Cerrar Sesión</Text>
         </Pressable>
@@ -100,68 +177,227 @@ export default function LoginPantalla() {
 
   // 🔑 Formulario de ingreso cuando NO hay sesión
   return (
-    <View style={styles.container}>
-      <Text style={styles.titulo}>Iniciar Sesión</Text>
-      
-      <Text style={styles.label}>Correo Electrónico</Text>
-      <Controller
-        control={control}
-        name="email"
-        render={({ field: { onChange, value } }) => (
-          <TextInput
-            style={styles.input}
-            placeholder="ejemplo@correo.com"
-            value={value}
-            onChangeText={onChange}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.titulo}>Iniciar Sesión</Text>
+        <Text style={styles.subtitulo}>
+          Ingresá a tu cuenta para guardar tus favoritos de Colón
+        </Text>
+
+        {/* Campo Email */}
+        <Text style={styles.label}>Correo electrónico</Text>
+        <Controller
+          control={control}
+          name="email"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              style={[styles.input, errors.email && styles.inputError]}
+              placeholder="turista@colon.gob.ar"
+              onBlur={onBlur}
+              onChangeText={onChange}
+              value={value}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          )}
+        />
+        {errors.email && (
+          <Text style={styles.errorText}>{errors.email.message}</Text>
         )}
-      />
-      {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
 
-      <Text style={styles.label}>Contraseña</Text>
-      <Controller
-        control={control}
-        name="password"
-        render={({ field: { onChange, value } }) => (
-          <TextInput
-            style={styles.input}
-            placeholder="••••••"
-            value={value}
-            onChangeText={onChange}
-            secureTextEntry
-          />
+        {/* Campo Contraseña */}
+        <Text style={styles.label}>Contraseña</Text>
+        <Controller
+          control={control}
+          name="password"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              style={[styles.input, errors.password && styles.inputError]}
+              placeholder="••••••"
+              onBlur={onBlur}
+              onChangeText={onChange}
+              value={value}
+              secureTextEntry
+            />
+          )}
+        />
+        {errors.password && (
+          <Text style={styles.errorText}>{errors.password.message}</Text>
         )}
-      />
-      {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
 
-      <Pressable style={styles.boton} onPress={handleSubmit(onSubmit)}>
-        <Text style={styles.botonTexto}>Ingresar</Text>
-      </Pressable>
+        {/* Botón Iniciar Sesión */}
+        <Pressable
+          style={styles.botonIngresar}
+          onPress={handleSubmit(onSubmit)}
+        >
+          <Text style={styles.botonTexto}>Ingresar</Text>
+        </Pressable>
 
-      <Pressable style={styles.botonBiometrico} onPress={handleProbarBiometria}>
-        <Text style={styles.botonTexto}>Ingresar con Huella / Rostro 👆</Text>
-      </Pressable>
-    </View>
+        {/* Botón Biometría */}
+        <Pressable
+          style={styles.botonBiometria}
+          onPress={handleProbarBiometria}
+        >
+          <Text style={styles.botonTextoBiometria}>
+            Ingresar con Huella / Rostro 👆
+          </Text>
+        </Pressable>
+
+        {/* 🚀 Enlace a Crear Cuenta / Registro */}
+        <View style={styles.footerRegistro}>
+          <Text style={styles.textoFooter}>¿No tenés una cuenta? </Text>
+          <Pressable onPress={() => router.push('/registro')}>
+            <Text style={styles.linkRegistro}>Crear Cuenta</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center', backgroundColor: '#FFF' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  titulo: { fontSize: 24, fontWeight: 'bold', marginBottom: 8, textAlign: 'center', color: '#1E293B' },
-  label: { fontSize: 14, fontWeight: '600', color: '#475569', marginTop: 12, marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#CBD5E1', padding: 12, borderRadius: 8, fontSize: 16 },
-  errorText: { color: '#E74C3C', fontSize: 12, marginTop: 4 },
-  boton: { backgroundColor: '#007AFF', padding: 14, borderRadius: 8, marginTop: 20, alignItems: 'center' },
-  botonBiometrico: { backgroundColor: '#34C759', padding: 14, borderRadius: 8, marginTop: 12, alignItems: 'center' },
-  botonTexto: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  profileCard: { alignItems: 'center', backgroundColor: '#F1F5F9', padding: 24, borderRadius: 16, marginBottom: 24 },
-  avatar: { fontSize: 48, marginBottom: 8 },
-  emailText: { fontSize: 16, color: '#64748B', marginBottom: 12 },
-  statusBadge: { backgroundColor: '#DCFCE7', color: '#166534', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, fontWeight: 'bold', fontSize: 12 },
-  botonCatalogo: { backgroundColor: '#007AFF', padding: 14, borderRadius: 8, marginBottom: 12, alignItems: 'center' },
-  botonCerrar: { backgroundColor: '#FEE2E2', padding: 14, borderRadius: 8, alignItems: 'center' },
-  botonTextoCerrar: { color: '#DC2626', fontWeight: 'bold', fontSize: 16 },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    padding: 24,
+    backgroundColor: '#fff',
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  profileCard: {
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    padding: 24,
+    borderRadius: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  avatar: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  titulo: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  subtitulo: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 20,
+  },
+  emailText: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 8,
+  },
+  statusBadge: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#16a34a',
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    backgroundColor: '#f8fafc',
+  },
+  inputError: {
+    borderColor: '#ef4444',
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  botonIngresar: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  botonTexto: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  botonPerfil: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  botonTextoPerfil: {
+    color: '#334155',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  botonBiometria: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  botonTextoBiometria: {
+    color: '#0284c7',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  botonCerrar: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  botonTextoCerrar: {
+    color: '#ef4444',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  footerRegistro: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 24,
+  },
+  textoFooter: {
+    color: '#64748b',
+    fontSize: 14,
+  },
+  linkRegistro: {
+    color: '#0284c7',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
 });
