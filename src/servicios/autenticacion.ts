@@ -3,7 +3,15 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { Alert } from 'react-native';
 
 const TOKEN_KEY = 'user_session_token';
+const USUARIO_KEY = 'user_profile_data';
 
+export interface Usuario {
+  nombre: string;
+  email: string;
+  password?: string;
+}
+
+// --- TOKEN DE SESIÓN ---
 export async function guardarToken(token: string): Promise<void> {
   await SecureStore.setItemAsync(TOKEN_KEY, token);
 }
@@ -12,10 +20,24 @@ export async function obtenerToken(): Promise<string | null> {
   return await SecureStore.getItemAsync(TOKEN_KEY);
 }
 
-export async function borrarToken(): Promise<void> {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+// --- DATOS DEL USUARIO REGISTRADO ---
+export async function guardarUsuario(usuario: Usuario): Promise<void> {
+  await SecureStore.setItemAsync(USUARIO_KEY, JSON.stringify(usuario));
 }
 
+export async function obtenerUsuario(): Promise<Usuario | null> {
+  const data = await SecureStore.getItemAsync(USUARIO_KEY);
+  return data ? JSON.parse(data) : null;
+}
+
+// --- CERRAR SESIÓN ---
+export async function borrarToken(): Promise<void> {
+  // Solo eliminamos el token de sesión para cerrar la sesión activa
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+
+}
+
+// --- BIOMETRÍA ---
 export async function autenticarConBiometria(): Promise<boolean> {
   try {
     const tieneHardware = await LocalAuthentication.hasHardwareAsync();
@@ -35,7 +57,7 @@ export async function autenticarConBiometria(): Promise<boolean> {
       promptMessage: 'Ingresar a Mi Ciudad Colón',
       fallbackLabel: 'Usar contraseña',
       cancelLabel: 'Cancelar',
-      disableDeviceFallback: false, // Permite usar el PIN/Patrón si falla el sensor
+      disableDeviceFallback: false,
     });
 
     if (!resultado.success) {
