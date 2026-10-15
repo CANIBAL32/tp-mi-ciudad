@@ -11,34 +11,43 @@ import {
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
 import { Lugar } from '../tipos/lugares';
 import { obtenerLugares } from '../servicios/lugares';
 import { obtenerFavoritosIds, alternarFavorito } from '../servicios/favoritos';
+import { obtenerUsuario } from '../servicios/autenticacion';
+import { useTema } from '../contexto/TemaContext'; 
 
 export default function FavoritosPantalla() {
+  const { colores } = useTema();
+
   const [lugaresFavoritos, setLugaresFavoritos] = useState<Lugar[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
 
-  // useFocusEffect recarga los datos cada vez que la pantalla pasa a estar en primer plano
   useFocusEffect(
     useCallback(() => {
       async function cargarFavoritos() {
         setCargando(true);
         try {
-          // 1. Obtener los IDs de la base de datos local SQLite
-          const favIds = await obtenerFavoritosIds();
+          // 1. Identificar si hay un usuario en SecureStore o usar el usuario por defecto
+          const usuario = await obtenerUsuario();
+          const usuarioId = usuario?.email || 'usuario_invitado';
 
-          if (favIds.length === 0) {
+          // 2. Obtener los IDs guardados en la base de datos SQLite
+          const favIds = await obtenerFavoritosIds(usuarioId);
+
+          if (!favIds || favIds.length === 0) {
             setLugaresFavoritos([]);
           } else {
-            // 2. Traer todos los lugares y filtrar solo los que están en SQLite
+            // 3. Obtener el catalogo completo de lugares y filtrar por ID
             const respuesta = await obtenerLugares();
-            const filtrados = respuesta.datos.filter((lugar) => favIds.includes(lugar.id));
+            const filtrados = respuesta.datos.filter((lugar) =>
+              favIds.includes(lugar.id)
+            );
             setLugaresFavoritos(filtrados);
           }
         } catch (error) {
-          console.error('Error al cargar la lista de favoritos:', error);
+          console.error('Error al cargar la lista de favoritos desde SQLite:', error);
+          setLugaresFavoritos([]);
         } finally {
           setCargando(false);
         }
@@ -49,16 +58,27 @@ export default function FavoritosPantalla() {
   );
 
   const handleQuitarFavorito = async (lugarId: string) => {
-    await alternarFavorito(lugarId);
-    // Quitar del estado local para que desaparezca de la pantalla al instante
-    setLugaresFavoritos((prev) => prev.filter((item) => item.id !== lugarId));
+    try {
+      const usuario = await obtenerUsuario();
+      const usuarioId = usuario?.email || 'usuario_invitado';
+
+      // Eliminar o alternar de SQLite
+      await alternarFavorito(lugarId, usuarioId);
+
+      // Actualizar el estado local para quitar la tarjeta inmediatamente de la lista
+      setLugaresFavoritos((prev) => prev.filter((item) => item.id !== lugarId));
+    } catch (error) {
+      console.error('Error al quitar elemento de favoritos:', error);
+    }
   };
 
   if (cargando) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
+        <SafeAreaView
+          style={[styles.centerContainer, { backgroundColor: colores.fondo }]}
+        >
+          <ActivityIndicator size="large" color="#0284c7" />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -66,45 +86,96 @@ export default function FavoritosPantalla() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colores.fondo }]}>
         <FlatList
           data={lugaresFavoritos}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 16 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() => router.push(`/lugar/${item.id}`)}
-              activeOpacity={0.8}
-            >
-              <Image
-                source={{
-                  uri: Array.isArray(item.imagenes) ? item.imagenes : (item.imagenes as any),
-                }}
-                style={styles.cardImage}
-              />
-              <View style={styles.cardContent}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>{item.nombre}</Text>
+          renderItem={({ item }) => {
+            // Obtencion segura de la URL de la primera imagen
+            const imagenUri = Array.isArray(item.imagenes) && item.imagenes.length > 0
+              ? item.imagenes[0]
+              : typeof item.imagenes === 'string'
+              ? item.imagenes
+              : '[suspicious link removed]';
+
+            return (
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colores.tarjetaFondo,
+                    borderColor: colores.tarjetaBorde,
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => router.push(`/lugar/${item.id}` as any)}
+                >
+                  <Image source={{ uri: imagenUri }} style={styles.cardImage} />
+                </TouchableOpacity>
+
+                <View style={styles.cardContent}>
+                  <View style={styles.cardHeader}>
+                    <TouchableOpacity
+                      style={{ flex: 1, marginRight: 8 }}
+                      onPress={() => router.push(`/lugar/${item.id}` as any)}
+                    >
+                      <Text
+                        style={[styles.cardTitle, { color: colores.textoPrincipal }]}
+                        numberOfLines={1}
+                      >
+                        {item.nombre}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => handleQuitarFavorito(item.id)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons name="heart" size={24} color="#ef4444" />
+                    </TouchableOpacity>
+                  </View>
+
                   <TouchableOpacity
-                    onPress={() => handleQuitarFavorito(item.id)}
-                    hitSlop={10}
+                    activeOpacity={0.8}
+                    onPress={() => router.push(`/lugar/${item.id}` as any)}
                   >
-                    <Ionicons name="heart" size={24} color="#E74C3C" />
+                    <Text
+                      style={[
+                        styles.cardDescription,
+                        { color: colores.textoSecundario },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {item.descripcionCorta}
+                    </Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.cardDescription} numberOfLines={2}>
-                  {item.descripcionCorta}
-                </Text>
               </View>
-            </TouchableOpacity>
-          )}
+            );
+          }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="heart-dislike-outline" size={60} color="#94A3B8" />
-              <Text style={styles.emptyTitle}>Sin favoritos guardados</Text>
-              <Text style={styles.emptySubtext}>
-                Tocá el ícono del corazón en los atractivos turísticos para guardarlos acá.
+              <Ionicons
+                name="heart-dislike-outline"
+                size={60}
+                color={colores.textoSecundario}
+              />
+              <Text
+                style={[styles.emptyTitle, { color: colores.textoPrincipal }]}
+              >
+                Sin favoritos guardados
+              </Text>
+              <Text
+                style={[
+                  styles.emptySubtext,
+                  { color: colores.textoSecundario },
+                ]}
+              >
+                Pulsá el ícono del corazón en los atractivos turísticos para
+                guardarlos en esta sección.
               </Text>
             </View>
           }
@@ -115,25 +186,57 @@ export default function FavoritosPantalla() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: {
+    flex: 1,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   card: {
-    backgroundColor: '#FFF',
     borderRadius: 12,
     marginBottom: 16,
     overflow: 'hidden',
+    borderWidth: 1,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
   },
-  cardImage: { width: '100%', height: 160 },
-  cardContent: { padding: 12 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A', flex: 1, marginRight: 8 },
-  cardDescription: { fontSize: 14, color: '#64748B', marginTop: 4 },
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 80, paddingHorizontal: 20 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#334155', marginTop: 12 },
-  emptySubtext: { fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 6 },
+  cardImage: {
+    width: '100%',
+    height: 160,
+  },
+  cardContent: {
+    padding: 14,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  cardDescription: {
+    fontSize: 14,
+    marginVertical: 8,
+    lineHeight: 20,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 60,
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
 });

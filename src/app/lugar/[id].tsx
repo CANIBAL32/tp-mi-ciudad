@@ -12,15 +12,19 @@ import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
 
-import { Lugar } from '../../tipos/lugares';
+import { Lugar } from '../../tipos/lugares'; 
 import { obtenerLugarPorId } from '../../servicios/lugares';
 import { obtenerFavoritosIds, alternarFavorito } from '../../servicios/favoritos';
+import { useTema } from '../../contexto/TemaContext';
 
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 export default function DetalleLugarPantalla() {
   // Leemos el ID del lugar desde la ruta dinámica (ejemplo: /lugar/lug-004)
   const { id } = useLocalSearchParams<{ id: string }>();
+
+  // 🎨 Consumimos los colores del tema
+  const { colores } = useTema();
 
   const [detalleLugar, setDetalleLugar] = useState<Lugar | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
@@ -58,8 +62,8 @@ export default function DetalleLugarPantalla() {
   if (cargando || !detalleLugar) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.containerCargando}>
-          <ActivityIndicator size="large" color="#007AFF" />
+        <SafeAreaView style={[styles.containerCargando, { backgroundColor: colores.fondo }]}>
+          <ActivityIndicator size="large" color="#0284c7" />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -67,7 +71,8 @@ export default function DetalleLugarPantalla() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
+      {/* 🎨 Fondo dinámico para el detalle */}
+      <SafeAreaView style={[styles.container, { backgroundColor: colores.fondo }]}>
         <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
           {/* Imagen Principal */}
           <Image
@@ -82,42 +87,56 @@ export default function DetalleLugarPantalla() {
           <View style={styles.detailBody}>
             {/* Título y Botón Corazón (SQLite) */}
             <View style={styles.titleRow}>
-              <Text style={styles.detailTitle}>{detalleLugar.nombre}</Text>
+              <Text style={[styles.detailTitle, { color: colores.textoPrincipal }]}>
+                {detalleLugar.nombre}
+              </Text>
               <TouchableOpacity onPress={handleToggleFavorito} hitSlop={10}>
                 <Ionicons
                   name={esFavorito ? 'heart' : 'heart-outline'}
                   size={30}
-                  color={esFavorito ? '#E74C3C' : '#64748B'}
+                  color={esFavorito ? '#ef4444' : colores.textoSecundario}
                 />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.detailAddress}>📍 Dirección: {detalleLugar.direccion}</Text>
+            <Text style={[styles.detailAddress, { color: colores.textoSecundario }]}>
+              📍 Dirección: {detalleLugar.direccion}
+            </Text>
 
             {/* Descripción */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Descripción</Text>
-              <Text style={styles.text}>{detalleLugar.descripcion}</Text>
+              <Text style={[styles.sectionTitle, { color: colores.textoPrincipal }]}>
+                Descripción
+              </Text>
+              <Text style={[styles.text, { color: colores.textoSecundario }]}>
+                {detalleLugar.descripcion}
+              </Text>
             </View>
 
             {/* Horarios de Atención */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Horarios de Atención</Text>
+              <Text style={[styles.sectionTitle, { color: colores.textoPrincipal }]}>
+                Horarios de Atención
+              </Text>
               {detalleLugar.horarios && detalleLugar.horarios.length > 0 ? (
                 detalleLugar.horarios.map((h, i) => (
-                  <Text key={i} style={styles.text}>
+                  <Text key={i} style={[styles.text, { color: colores.textoSecundario }]}>
                     • {DIAS_SEMANA[h.dia]}: {h.abre} a {h.cierra} hs
                   </Text>
                 ))
               ) : (
-                <Text style={styles.text}>Abierto todo el día / Sin horario específico</Text>
+                <Text style={[styles.text, { color: colores.textoSecundario }]}>
+                  Abierto todo el día / Sin horario específico
+                </Text>
               )}
             </View>
 
             {/* Información del Atractivo */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Información del Atractivo</Text>
-              <Text style={styles.text}>
+              <Text style={[styles.sectionTitle, { color: colores.textoPrincipal }]}>
+                Información del Atractivo
+              </Text>
+              <Text style={[styles.text, { color: colores.textoSecundario }]}>
                 Entrada:{' '}
                 {detalleLugar.precioEntrada === 0
                   ? 'Gratuita'
@@ -126,9 +145,11 @@ export default function DetalleLugarPantalla() {
                   : 'No especificada'}
               </Text>
               {detalleLugar.telefono && (
-                <Text style={styles.text}>📞 Teléfono: {detalleLugar.telefono}</Text>
+                <Text style={[styles.text, { color: colores.textoSecundario }]}>
+                  📞 Teléfono: {detalleLugar.telefono}
+                </Text>
               )}
-              <Text style={styles.text}>
+              <Text style={[styles.text, { color: colores.textoSecundario }]}>
                 ♿ Accesibilidad:{' '}
                 {detalleLugar.accesible
                   ? 'Apto para personas con movilidad reducida'
@@ -143,14 +164,47 @@ export default function DetalleLugarPantalla() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA', paddingHorizontal: 16 },
-  containerCargando: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  detailImage: { width: '100%', height: 220, borderRadius: 12, marginTop: 12, marginBottom: 12 },
-  detailBody: { paddingBottom: 20 },
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  detailTitle: { fontSize: 24, fontWeight: 'bold', color: '#0F172A', flex: 1, marginRight: 8 },
-  detailAddress: { fontSize: 14, color: '#64748B', marginBottom: 12 },
-  section: { marginTop: 16 },
-  sectionTitle: { fontSize: 17, fontWeight: '600', color: '#1E293B', marginBottom: 6 },
-  text: { fontSize: 15, color: '#334155', lineHeight: 22, marginBottom: 4 },
+  container: {
+    flex: 1,
+  },
+  containerCargando: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailImage: {
+    width: '100%',
+    height: 240,
+  },
+  detailBody: {
+    padding: 16,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  detailTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    flex: 1,
+    marginRight: 10,
+  },
+  detailAddress: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  section: {
+    marginTop: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  text: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
 });

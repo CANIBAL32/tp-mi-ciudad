@@ -16,13 +16,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { Lugar, Categoria } from '../tipos/lugares';
 import { obtenerLugares, obtenerCategorias } from '../servicios/lugares';
 import {
-  inicializarBaseDatosFavoritos,
   obtenerFavoritosIds,
   alternarFavorito,
 } from '../servicios/favoritos';
-import { obtenerToken } from '../servicios/autenticacion';
+import { obtenerToken, obtenerUsuario } from '../servicios/autenticacion';
+import { inicializarBaseDatos } from '../servicios/db';
+
+import { useTema } from '../contexto/TemaContext';
 
 export default function PantallaCatalogo() {
+  const { colores } = useTema();
+
   const [lugares, setLugares] = useState<Lugar[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('cat-todas');
@@ -30,11 +34,10 @@ export default function PantallaCatalogo() {
   const [cargando, setCargando] = useState<boolean>(true);
   const [favoritosIds, setFavoritosIds] = useState<string[]>([]);
 
-  // Inicializar SQLite y cargar Categorías al montar el componente
   useEffect(() => {
     async function inicializar() {
       try {
-        await inicializarBaseDatosFavoritos();
+        await inicializarBaseDatos();
         const resCategorias = await obtenerCategorias();
         setCategorias(resCategorias.datos);
       } catch (error) {
@@ -44,7 +47,6 @@ export default function PantallaCatalogo() {
     inicializar();
   }, []);
 
-  // Recargar Lugares y Favoritos de SQLite cada vez que la pantalla toma foco
   useFocusEffect(
     useCallback(() => {
       cargarDatos();
@@ -52,134 +54,146 @@ export default function PantallaCatalogo() {
   );
 
   const cargarDatos = async () => {
-  setCargando(true);
-  try {
-    // 1. Verificamos si hay un token de sesión activo antes de leer SQLite
-    const token = await obtenerToken();
+    setCargando(true);
+    try {
+      const token = await obtenerToken();
+      if (!token) {
+        setFavoritosIds([]);
+      } else {
+        const usr = await obtenerUsuario();
+        const usrId = usr?.email || 'usuario_invitado';
+        const favs = await obtenerFavoritosIds(usrId);
+        setFavoritosIds(favs);
+      }
 
-    if (!token) {
-      // Si cerró sesión, no mostramos ningún corazón marcado
-      setFavoritosIds([]);
-    } else {
-      // Si hay sesión activa, leemos los favoritos guardados en la base de datos
-      const favs = await obtenerFavoritosIds();
-      setFavoritosIds(favs);
+      const resLugares = await obtenerLugares(busquedaLugar, categoriaSeleccionada);
+      setLugares(resLugares.datos);
+    } catch (error) {
+      console.error('Error al cargar lugares:', error);
+    } finally {
+      setCargando(false);
     }
+  };
 
-    // 2. Traer lugares filtrados por categoría / búsqueda
-    const resLugares = await obtenerLugares(busquedaLugar, categoriaSeleccionada);
-    setLugares(resLugares.datos);
-  } catch (error) {
-    console.error('Error al cargar lugares:', error);
-  } finally {
-    setCargando(false);
-  }
-};
-
-  // Ir a favoritos con verificación de inicio de sesión
   const handleIrAFavoritos = async () => {
     const token = await obtenerToken();
     if (!token) {
-      // Si no hay sesión iniciada, manda a Iniciar Sesión
       router.push('/login');
     } else {
-      // Si hay sesión, entra a Favoritos
       router.push('/favoritos');
     }
   };
 
-  // Alternar favorito con verificación de sesión
   const handleToggleFavorito = async (lugarId: string) => {
-    const token = await obtenerToken();
-    if (!token) {
-      // Si el turista no inició sesión, lo redirigimos al login
-      router.push('/login');
-      return;
-    }
+    try {
+      const token = await obtenerToken();
+      if (!token) {
+        router.push('/login');
+        return;
+      }
 
-    // Si está autenticado, guarda/quita en la base de datos local SQLite
-    await alternarFavorito(lugarId);
-    const favsActualizados = await obtenerFavoritosIds();
-    setFavoritosIds(favsActualizados);
+      const usr = await obtenerUsuario();
+      const usrId = usr?.email || 'usuario_invitado';
+
+      await alternarFavorito(lugarId, usrId);
+      const favsActualizados = await obtenerFavoritosIds(usrId);
+      setFavoritosIds(favsActualizados);
+    } catch (error) {
+      console.error('Error al alternar favorito:', error);
+    }
   };
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
-        {/* Encabezado Principal con botones de Login y Favoritos */}
+      <SafeAreaView style={[styles.container, { backgroundColor: colores.fondo }]}>
+        
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.mainTitle}>Mi Ciudad - Colón</Text>
-            <Text style={styles.subTitle}>Guía de Atractivos Turísticos</Text>
+            <Text style={[styles.mainTitle, { color: colores.textoPrincipal }]}>
+              Mi Ciudad - Colón
+            </Text>
+            <Text style={[styles.subTitle, { color: colores.textoSecundario }]}>
+              Guía Turística Oficial
+            </Text>
           </View>
 
           <View style={styles.headerButtons}>
-            {/* Botón Acceso a Favoritos */}
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={handleIrAFavoritos}
-            >
-              <Ionicons name="heart" size={22} color="#E74C3C" />
+            <TouchableOpacity style={styles.iconButton} onPress={handleIrAFavoritos}>
+              <Ionicons name="heart-outline" size={24} color="#0284c7" />
             </TouchableOpacity>
-
-            {/* Botón Acceso a Iniciar Sesión / Perfil */}
-            <TouchableOpacity
-              style={[styles.iconButton, { backgroundColor: '#E0F2FE' }]}
-              onPress={() => router.push('/login')}
-            >
-              <Ionicons name="person" size={22} color="#0284C7" />
+            <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/login')}>
+              <Ionicons name="person-outline" size={24} color="#0284c7" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Buscador por Texto */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={20} color="#64748B" style={{ marginRight: 8 }} />
+        <View
+          style={[
+            styles.searchContainer,
+            { backgroundColor: colores.tarjetaFondo, borderColor: colores.tarjetaBorde },
+          ]}
+        >
+          <Ionicons
+            name="search-outline"
+            size={20}
+            color={colores.textoSecundario}
+            style={{ marginRight: 8 }}
+          />
           <TextInput
+            style={[styles.searchInput, { color: colores.textoPrincipal }]}
             placeholder="Buscar por nombre, termas, bodegas..."
+            placeholderTextColor={colores.textoSecundario}
             value={busquedaLugar}
             onChangeText={setBusquedaLugar}
-            style={styles.searchInput}
           />
         </View>
 
-        {/* Chips de Categorías */}
-        <View style={styles.categoriesWrapper}>
-          <FlatList
-            horizontal
-            data={categorias}
-            keyExtractor={(item) => item.id}
-            showsHorizontalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.categoryChip,
-                  categoriaSeleccionada === item.id && styles.categoryChipActive,
-                ]}
-                onPress={() => setCategoriaSeleccionada(item.id)}
-              >
-                <Ionicons
-                  name={item.icono as any}
-                  size={16}
-                  color={categoriaSeleccionada === item.id ? '#FFF' : '#475569'}
-                  style={{ marginRight: 6 }}
-                />
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    categoriaSeleccionada === item.id && styles.categoryChipTextActive,
-                  ]}
-                >
-                  {item.nombre}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
+        {categorias.length > 0 && (
+          <View style={styles.categoriesWrapper}>
+            <FlatList
+              horizontal
+              data={categorias}
+              keyExtractor={(item) => item.id}
+              showsHorizontalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const esActiva = categoriaSeleccionada === item.id;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.categoryChip,
+                      {
+                        backgroundColor: esActiva
+                          ? '#0284c7'
+                          : colores.tarjetaFondo,
+                        borderColor: esActiva ? '#0284c7' : colores.tarjetaBorde,
+                      },
+                    ]}
+                    onPress={() => setCategoriaSeleccionada(item.id)}
+                  >
+                    <Ionicons
+                      name={item.icono as any}
+                      size={16}
+                      color={esActiva ? '#FFF' : colores.textoSecundario}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        { color: esActiva ? '#FFF' : colores.textoSecundario },
+                        esActiva && styles.categoryChipTextActive,
+                      ]}
+                    >
+                      {item.nombre}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        )}
 
-        {/* Listado de Atractivos Turísticos */}
         {cargando ? (
-          <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color="#0284c7" style={{ marginTop: 40 }} />
         ) : (
           <FlatList
             data={lugares}
@@ -187,53 +201,86 @@ export default function PantallaCatalogo() {
             contentContainerStyle={{ paddingBottom: 20 }}
             renderItem={({ item }) => {
               const esFav = favoritosIds.includes(item.id);
+
+              const imagenUri = Array.isArray(item.imagenes) && item.imagenes.length > 0
+                ? item.imagenes[0]
+                : typeof item.imagenes === 'string'
+                ? item.imagenes
+                : '[suspicious link removed]';
+
               return (
-                <TouchableOpacity
-                  style={styles.card}
-                  onPress={() => router.push(`/lugar/${item.id}` as any)}
-                  activeOpacity={0.8}
+                <View
+                  style={[
+                    styles.card,
+                    {
+                      backgroundColor: colores.tarjetaFondo,
+                      borderColor: colores.tarjetaBorde,
+                    },
+                  ]}
                 >
-                  <Image
-                    source={{
-                      uri: Array.isArray(item.imagenes) ? item.imagenes : (item.imagenes as any),
-                    }}
-                    style={styles.cardImage}
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => router.push(`/lugar/${item.id}` as any)}
+                  >
+                    <Image source={{ uri: imagenUri }} style={styles.cardImage} />
+                  </TouchableOpacity>
+
                   <View style={styles.cardContent}>
                     <View style={styles.cardHeader}>
-                      <Text style={styles.cardTitle}>{item.nombre}</Text>
-
-                      {/* Corazón SQLite con validación de Sesión */}
                       <TouchableOpacity
+                        style={{ flex: 1, marginRight: 8 }}
+                        onPress={() => router.push(`/lugar/${item.id}` as any)}
+                      >
+                        <Text
+                          style={[styles.cardTitle, { color: colores.textoPrincipal }]}
+                          numberOfLines={1}
+                        >
+                          {item.nombre}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.favButton}
                         onPress={() => handleToggleFavorito(item.id)}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                       >
                         <Ionicons
                           name={esFav ? 'heart' : 'heart-outline'}
                           size={24}
-                          color={esFav ? '#E74C3C' : '#94A3B8'}
+                          color={esFav ? '#ef4444' : colores.textoSecundario}
                         />
                       </TouchableOpacity>
                     </View>
 
-                    <Text style={styles.cardDescription} numberOfLines={2}>
-                      {item.descripcionCorta}
-                    </Text>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => router.push(`/lugar/${item.id}` as any)}
+                    >
+                      <Text
+                        style={[
+                          styles.cardDescription,
+                          { color: colores.textoSecundario },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {item.descripcionCorta}
+                      </Text>
 
-                    <Text style={styles.cardPrice}>
-                      {item.precioEntrada === 0
-                        ? 'Entrada Gratuita'
-                        : item.precioEntrada
-                        ? `$${item.precioEntrada}`
-                        : 'Sin costo especificado'}
-                    </Text>
+                      <Text style={styles.cardPrice}>
+                        {item.precioEntrada === 0
+                          ? 'Entrada Gratuita'
+                          : item.precioEntrada
+                          ? `$${item.precioEntrada}`
+                          : 'Sin costo especificado'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             }}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>
-                No se encontraron atractivos turísticos que coincidan con tu búsqueda.
+              <Text style={[styles.emptyText, { color: colores.textoSecundario }]}>
+                No se encontraron atractivos turísticos en esta categoría.
               </Text>
             }
           />
@@ -244,63 +291,104 @@ export default function PantallaCatalogo() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA', paddingHorizontal: 16 },
+  container: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
-    marginBottom: 8,
+    marginVertical: 12,
   },
-  mainTitle: { fontSize: 24, fontWeight: 'bold', color: '#1A1A1A' },
-  subTitle: { fontSize: 14, color: '#64748B' },
-  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mainTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  subTitle: {
+    fontSize: 13,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+  },
   iconButton: {
     padding: 8,
-    backgroundColor: '#FFE2E2',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginLeft: 6,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 46,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     marginBottom: 12,
   },
-  searchInput: { flex: 1, fontSize: 15, color: '#333' },
-  categoriesWrapper: { maxHeight: 42, marginBottom: 16 },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+  },
+  categoriesWrapper: {
+    maxHeight: 42,
+    marginBottom: 16,
+  },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E2E8F0',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
     marginRight: 8,
+    borderWidth: 1,
   },
-  categoryChipActive: { backgroundColor: '#007AFF' },
-  categoryChipText: { fontSize: 14, color: '#475569', fontWeight: '500' },
-  categoryChipTextActive: { color: '#FFF', fontWeight: 'bold' },
+  categoryChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  categoryChipTextActive: {
+    fontWeight: 'bold',
+  },
   card: {
-    backgroundColor: '#FFF',
+    borderWidth: 1,
     borderRadius: 12,
     marginBottom: 16,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
     elevation: 2,
   },
-  cardImage: { width: '100%', height: 160 },
-  cardContent: { padding: 14 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', flex: 1, marginRight: 8 },
-  cardDescription: { fontSize: 14, color: '#64748B', marginVertical: 8, lineHeight: 20 },
-  cardPrice: { fontSize: 14, fontWeight: '700', color: '#16A34A' },
-  emptyText: { textAlign: 'center', color: '#64748B', marginTop: 40, fontSize: 15 },
+  cardImage: {
+    width: '100%',
+    height: 160,
+  },
+  cardContent: {
+    padding: 12,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  favButton: {
+    padding: 4,
+  },
+  cardDescription: {
+    fontSize: 14,
+    marginVertical: 6,
+    lineHeight: 20,
+  },
+  cardPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#16a34a',
+    marginTop: 4,
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 40,
+    fontSize: 15,
+  },
 });

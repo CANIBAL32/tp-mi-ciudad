@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { obtenerConexionDB } from '../servicios/db';
 
 export interface PreferenciasUsuario {
   tema: 'claro' | 'oscuro' | 'sistema';
@@ -16,7 +17,7 @@ const PREFERENCIAS_DEFAULT: PreferenciasUsuario = {
 
 // Inicializar tabla de preferencias en SQLite
 export async function inicializarBaseDatosPreferencias(): Promise<void> {
-  const db = await SQLite.openDatabaseAsync('miciudad.db');
+  const db = await obtenerConexionDB();
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS preferencias (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -31,7 +32,7 @@ export async function inicializarBaseDatosPreferencias(): Promise<void> {
 // Obtener preferencias guardadas
 export async function obtenerPreferencias(): Promise<PreferenciasUsuario> {
   try {
-    const db = await SQLite.openDatabaseAsync('miciudad.db');
+    const db = await obtenerConexionDB();
     const resultado = await db.getFirstAsync<{
       tema: 'claro' | 'oscuro' | 'sistema';
       categoriasFavoritas: string;
@@ -60,7 +61,7 @@ export async function guardarPreferencias(
   prefs: PreferenciasUsuario
 ): Promise<void> {
   try {
-    const db = await SQLite.openDatabaseAsync('miciudad.db');
+    const db = await obtenerConexionDB();
     const catsJson = JSON.stringify(prefs.categoriasFavoritas);
 
     await db.runAsync(
