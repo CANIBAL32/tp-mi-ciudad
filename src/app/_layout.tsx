@@ -71,12 +71,14 @@ function ContenidoLayout() {
           },
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'Mi Ciudad - Colón' }} />
+        {/* 1. Grupo de pestañas principales (Tabs) */}
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+        {/* 2. Pantallas secundarias/modales fuera de las pestañas */}
         <Stack.Screen name="lugar/[id]" options={{ title: 'Detalle del Atractivo' }} />
         <Stack.Screen name="favoritos" options={{ title: 'Mis Favoritos' }} />
         <Stack.Screen name="login" options={{ title: 'Iniciar Sesión' }} />
         <Stack.Screen name="registro" options={{ title: 'Crear Cuenta' }} />
-        <Stack.Screen name="perfil" options={{ title: 'Mi Perfil' }} />
       </Stack>
     </View>
   );

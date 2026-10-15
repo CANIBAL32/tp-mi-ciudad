@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { obtenerUsuario, borrarToken, Usuario } from '../servicios/autenticacion';
-import { useTema } from '../contexto/TemaContext';
+import { obtenerUsuario, borrarToken, Usuario } from '../../servicios/autenticacion';
+import { useTema } from '../../contexto/TemaContext';
 
 export default function PantallaPerfil() {
   const { colores, modo, setModo } = useTema();

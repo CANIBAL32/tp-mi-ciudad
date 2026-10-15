@@ -13,16 +13,16 @@ import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Lugar, Categoria } from '../tipos/lugares';
-import { obtenerLugares, obtenerCategorias } from '../servicios/lugares';
+import { Lugar, Categoria } from '../../tipos/lugares';
+import { obtenerLugares, obtenerCategorias } from '../../servicios/lugares';
 import {
   obtenerFavoritosIds,
   alternarFavorito,
-} from '../servicios/favoritos';
-import { obtenerToken, obtenerUsuario } from '../servicios/autenticacion';
-import { inicializarBaseDatos } from '../servicios/db';
+} from '../../servicios/favoritos';
+import { obtenerToken, obtenerUsuario } from '../../servicios/autenticacion';
+import { inicializarBaseDatos } from '../../servicios/db';
 
-import { useTema } from '../contexto/TemaContext';
+import { useTema } from '../../contexto/TemaContext';
 
 export default function PantallaCatalogo() {
   const { colores } = useTema();
