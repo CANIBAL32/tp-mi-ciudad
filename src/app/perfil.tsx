@@ -1,439 +1,122 @@
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  useColorScheme,
-} from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
-import Ionicons from '@react-native-vector-icons/ionicons';
-import * as SQLite from 'expo-sqlite';
-
-// Servicios de autenticación
-import {
-  obtenerUsuario,
-  borrarToken,
-  Usuario,
-} from '../servicios/autenticacion'; // Ajustá a '../src/servicios/autenticacion' si tu carpeta lleva /src/
-
-const CATEGORIAS_DISPONIBLES = [
-  { id: 'cat-termas', nombre: 'Termas', icono: 'water-outline' },
-  { id: 'cat-playas', nombre: 'Playas y Ríos', icono: 'sunny-outline' },
-  { id: 'cat-museos', nombre: 'Historia y Museos', icono: 'library-outline' },
-  { id: 'cat-gastronomia', nombre: 'Gastronomía', icono: 'restaurant-outline' },
-  { id: 'cat-naturaleza', nombre: 'Naturaleza', icono: 'leaf-outline' },
-];
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { obtenerUsuario, borrarToken, Usuario } from '../servicios/autenticacion';
+import { useTema } from '../contexto/TemaContext';
 
 export default function PantallaPerfil() {
+  const { colores, modo, setModo } = useTema();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [cargando, setCargando] = useState<boolean>(true);
 
-  // Estados de Preferencias
-  const [tema, setTema] = useState<'claro' | 'oscuro' | 'sistema'>('claro');
-  const [categoriasInteres, setCategoriasInteres] = useState<string[]>(['cat-termas']);
+  useEffect(() => {
+    cargarUsuario();
+  }, []);
 
-  const systemColorScheme = useColorScheme();
-
-  // 🌙 Evaluamos si el tema visual activo debe ser oscuro
-  const esOscuro =
-    tema === 'oscuro' || (tema === 'sistema' && systemColorScheme === 'dark');
-
-  // Recargar perfil y SQLite cada vez que la pantalla gana foco
-  useFocusEffect(
-    useCallback(() => {
-      cargarPerfilYPreferencias();
-    }, [])
-  );
-
-  const cargarPerfilYPreferencias = async () => {
-    setCargando(true);
+  const cargarUsuario = async () => {
     try {
-      // 1. Cargar usuario registrado desde SecureStore
       const usr = await obtenerUsuario();
-      if (usr) {
-        setUsuario(usr);
-      }
-
-      // 2. Cargar preferencias guardadas en SQLite
-      const db = await SQLite.openDatabaseAsync('miciudad.db');
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS preferencias (
-          clave TEXT PRIMARY KEY NOT NULL,
-          valor TEXT NOT NULL
-        );
-      `);
-
-      const regTema = await db.getFirstAsync<{ valor: string }>(
-        'SELECT valor FROM preferencias WHERE clave = ?;',
-        ['tema_visual']
-      );
-      if (regTema?.valor) {
-        setTema(regTema.valor as any);
-      }
-
-      const regCat = await db.getFirstAsync<{ valor: string }>(
-        'SELECT valor FROM preferencias WHERE clave = ?;',
-        ['categorias_interes']
-      );
-      if (regCat?.valor) {
-        setCategoriasInteres(JSON.parse(regCat.valor));
-      }
+      if (usr) setUsuario(usr);
     } catch (error) {
-      console.error('Error al cargar perfil o SQLite:', error);
-    } finally {
-      setCargando(false);
+      console.error('Error al cargar usuario:', error);
     }
   };
 
-  // 🎨 Guardar cambio de Tema en SQLite
-  const handleCambiarTema = async (nuevoTema: 'claro' | 'oscuro' | 'sistema') => {
-    setTema(nuevoTema);
-    try {
-      const db = await SQLite.openDatabaseAsync('miciudad.db');
-      await db.runAsync(
-        'INSERT OR REPLACE INTO preferencias (clave, valor) VALUES (?, ?);',
-        ['tema_visual', nuevoTema]
-      );
-    } catch (error) {
-      console.error('Error guardando tema en SQLite:', error);
-    }
-  };
-
-  // 🏷️ Seleccionar/Deseleccionar categorías en SQLite
-  const handleToggleCategoria = async (catId: string) => {
-    let seleccionadas: string[];
-    if (categoriasInteres.includes(catId)) {
-      seleccionadas = categoriasInteres.filter((id) => id !== catId);
-    } else {
-      seleccionadas = [...categoriasInteres, catId];
-    }
-
-    setCategoriasInteres(seleccionadas);
-
-    try {
-      const db = await SQLite.openDatabaseAsync('miciudad.db');
-      await db.runAsync(
-        'INSERT OR REPLACE INTO preferencias (clave, valor) VALUES (?, ?);',
-        ['categorias_interes', JSON.stringify(seleccionadas)]
-      );
-    } catch (error) {
-      console.error('Error guardando categorías en SQLite:', error);
-    }
-  };
-
-  // 🚪 Cerrar sesión
-  const handleCerrarSesion = async () => {
+  const handleCerrarSesion = () => {
     Alert.alert('Cerrar Sesión', '¿Estás segura de que querés salir?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Cerrar Sesión',
         style: 'destructive',
         onPress: async () => {
-          await borrarToken();
-          Alert.alert('Sesión finalizada', 'Has cerrado sesión correctamente.');
-          router.replace('/login');
+          try {
+            await borrarToken();
+            router.replace('/login');
+          } catch (error) {
+            console.error('Error al cerrar sesión:', error);
+          }
         },
       },
     ]);
   };
 
-  // 🎨 Paleta de colores dinámica para Modo Oscuro y Claro
-  const colores = {
-    fondo: esOscuro ? '#0f172a' : '#f8fafc',
-    tarjetaFondo: esOscuro ? '#1e293b' : '#fff',
-    tarjetaBorde: esOscuro ? '#334155' : '#e2e8f0',
-    textoPrincipal: esOscuro ? '#f8fafc' : '#0f172a',
-    textoSecundario: esOscuro ? '#94a3b8' : '#64748b',
-    botonTemaInactivo: esOscuro ? '#1e293b' : '#fff',
-    botonTemaTextoInactivo: esOscuro ? '#cbd5e1' : '#475569',
-  };
-
-  if (cargando) {
-    return (
-      <View style={[styles.centerContainer, { backgroundColor: colores.fondo }]}>
-        <ActivityIndicator size="large" color="#0284c7" />
-      </View>
-    );
-  }
-
   return (
     <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colores.fondo }]}>
-      {/* 👤 Tarjeta de Perfil de Usuario */}
-      <View
-        style={[
-          styles.cardPerfil,
-          { backgroundColor: colores.tarjetaFondo, borderColor: colores.tarjetaBorde },
-        ]}
-      >
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person-circle-outline" size={72} color="#0284c7" />
-        </View>
-        <Text style={[styles.nombreUsuario, { color: colores.textoPrincipal }]}>
+      {/* 👤 Tarjeta de Perfil */}
+      <View style={[styles.card, { backgroundColor: colores.tarjetaFondo, borderColor: colores.tarjetaBorde }]}>
+        <Ionicons name="person-circle-outline" size={72} color="#0284c7" />
+        <Text style={[styles.nombre, { color: colores.textoPrincipal }]}>
           {usuario?.nombre || 'Turista en Colón'}
         </Text>
-        <Text style={[styles.emailUsuario, { color: colores.textoSecundario }]}>
+        <Text style={[styles.email, { color: colores.textoSecundario }]}>
           {usuario?.email || 'turista@colon.gob.ar'}
         </Text>
-        <View style={styles.badgeSesion}>
-          <Text style={styles.badgeTexto}>✓ Sesión Activa (SecureStore)</Text>
+      </View>
+
+      {/* 🎨 Selector de Tema Visual */}
+      <View style={[styles.seccionTema, { backgroundColor: colores.tarjetaFondo, borderColor: colores.tarjetaBorde }]}>
+        <Text style={[styles.tituloSeccion, { color: colores.textoPrincipal }]}>
+          Apariencia de la App
+        </Text>
+        <Text style={[styles.subtituloSeccion, { color: colores.textoSecundario }]}>
+          Seleccioná el tema visual que prefieras:
+        </Text>
+
+        <View style={styles.botonesTemaRow}>
+          <TouchableOpacity
+            style={[styles.btnTema, modo === 'claro' && styles.btnTemaActivo]}
+            onPress={() => setModo('claro')}
+          >
+            <Ionicons name="sunny-outline" size={18} color={modo === 'claro' ? '#fff' : colores.textoPrincipal} />
+            <Text style={[styles.btnTemaTexto, modo === 'claro' ? styles.btnTemaTextoActivo : { color: colores.textoPrincipal }]}>
+              Claro
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.btnTema, modo === 'oscuro' && styles.btnTemaActivo]}
+            onPress={() => setModo('oscuro')}
+          >
+            <Ionicons name="moon-outline" size={18} color={modo === 'oscuro' ? '#fff' : colores.textoPrincipal} />
+            <Text style={[styles.btnTemaTexto, modo === 'oscuro' ? styles.btnTemaTextoActivo : { color: colores.textoPrincipal }]}>
+              Oscuro
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.btnTema, modo === 'sistema' && styles.btnTemaActivo]}
+            onPress={() => setModo('sistema')}
+          >
+            <Ionicons name="phone-portrait-outline" size={18} color={modo === 'sistema' ? '#fff' : colores.textoPrincipal} />
+            <Text style={[styles.btnTemaTexto, modo === 'sistema' ? styles.btnTemaTextoActivo : { color: colores.textoPrincipal }]}>
+              Auto
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* 🎨 Sección de Apariencia / Tema Visual */}
-      <Text style={[styles.seccionTitulo, { color: colores.textoPrincipal }]}>
-        Apariencia de la App
-      </Text>
-      <View style={styles.opcionesRow}>
-        <TouchableOpacity
-          style={[
-            styles.botonTema,
-            { backgroundColor: colores.botonTemaInactivo, borderColor: colores.tarjetaBorde },
-            tema === 'claro' && styles.botonTemaActivo,
-          ]}
-          onPress={() => handleCambiarTema('claro')}
-        >
-          <Ionicons
-            name="sunny-outline"
-            size={22}
-            color={tema === 'claro' ? '#fff' : colores.botonTemaTextoInactivo}
-          />
-          <Text
-            style={[
-              styles.textoTema,
-              { color: colores.botonTemaTextoInactivo },
-              tema === 'claro' && styles.textoTemaActivo,
-            ]}
-          >
-            Claro
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.botonTema,
-            { backgroundColor: colores.botonTemaInactivo, borderColor: colores.tarjetaBorde },
-            tema === 'oscuro' && styles.botonTemaActivo,
-          ]}
-          onPress={() => handleCambiarTema('oscuro')}
-        >
-          <Ionicons
-            name="moon-outline"
-            size={22}
-            color={tema === 'oscuro' ? '#fff' : colores.botonTemaTextoInactivo}
-          />
-          <Text
-            style={[
-              styles.textoTema,
-              { color: colores.botonTemaTextoInactivo },
-              tema === 'oscuro' && styles.textoTemaActivo,
-            ]}
-          >
-            Oscuro
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.botonTema,
-            { backgroundColor: colores.botonTemaInactivo, borderColor: colores.tarjetaBorde },
-            tema === 'sistema' && styles.botonTemaActivo,
-          ]}
-          onPress={() => handleCambiarTema('sistema')}
-        >
-          <Ionicons
-            name="settings-outline"
-            size={22}
-            color={tema === 'sistema' ? '#fff' : colores.botonTemaTextoInactivo}
-          />
-          <Text
-            style={[
-              styles.textoTema,
-              { color: colores.botonTemaTextoInactivo },
-              tema === 'sistema' && styles.textoTemaActivo,
-            ]}
-          >
-            Sistema
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 🏷️ Sección de Categorías de Interés (SQLite) */}
-      <Text style={[styles.seccionTitulo, { color: colores.textoPrincipal }]}>
-        Tus Intereses Turísticos (SQLite)
-      </Text>
-      <Text style={[styles.seccionSubtitulo, { color: colores.textoSecundario }]}>
-        Tocá las categorías para elegirlas o desmarcarlas:
-      </Text>
-
-      <View style={styles.chipsContainer}>
-        {CATEGORIAS_DISPONIBLES.map((cat) => {
-          const seleccionada = categoriasInteres.includes(cat.id);
-          return (
-            <TouchableOpacity
-              key={cat.id}
-              style={[
-                styles.chipInteres,
-                {
-                  backgroundColor: esOscuro ? '#1e293b' : '#e0f2fe',
-                  borderColor: esOscuro ? '#334155' : '#bae6fd',
-                },
-                seleccionada && styles.chipInteresActivo,
-              ]}
-              onPress={() => handleToggleCategoria(cat.id)}
-            >
-              <Ionicons
-                name={cat.icono as any}
-                size={18}
-                color={seleccionada ? '#fff' : esOscuro ? '#38bdf8' : '#0284c7'}
-                style={{ marginRight: 6 }}
-              />
-              <Text
-                style={[
-                  styles.textoChip,
-                  { color: esOscuro ? '#38bdf8' : '#0284c7' },
-                  seleccionada && styles.textoChipActivo,
-                ]}
-              >
-                {cat.nombre}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* 🚪 Botón de Cerrar Sesión */}
+      {/* 🚪 Botón Cerrar Sesión */}
       <TouchableOpacity style={styles.botonCerrar} onPress={handleCerrarSesion}>
         <Ionicons name="log-out-outline" size={20} color="#ef4444" style={{ marginRight: 8 }} />
-        <Text style={styles.textoBotonCerrar}>Cerrar Sesión</Text>
+        <Text style={styles.textoCerrar}>Cerrar Sesión</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  container: {
-    padding: 20,
-    flexGrow: 1,
-  },
-  cardPerfil: {
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 24,
-    borderWidth: 1,
-    elevation: 2,
-  },
-  avatarContainer: {
-    marginBottom: 8,
-  },
-  nombreUsuario: {
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  emailUsuario: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  badgeSesion: {
-    marginTop: 12,
-    backgroundColor: '#dcfce7',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  badgeTexto: {
-    color: '#16a34a',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  seccionTitulo: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    marginTop: 8,
-  },
-  seccionSubtitulo: {
-    fontSize: 13,
-    marginBottom: 12,
-  },
-  opcionesRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  botonTema: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginHorizontal: 4,
-  },
-  botonTemaActivo: {
-    backgroundColor: '#0284c7',
-    borderColor: '#0284c7',
-  },
-  textoTema: {
-    marginLeft: 6,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  textoTemaActivo: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  chipsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 28,
-  },
-  chipInteres: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginRight: 8,
-    marginBottom: 10,
-  },
-  chipInteresActivo: {
-    backgroundColor: '#0284c7',
-    borderColor: '#0284c7',
-  },
-  textoChip: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  textoChipActivo: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  botonCerrar: {
-    flexDirection: 'row',
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-  },
-  textoBotonCerrar: {
-    color: '#ef4444',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  container: { padding: 20, flexGrow: 1, justifyContent: 'center' },
+  card: { borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 20, borderWidth: 1 },
+  nombre: { fontSize: 20, fontWeight: 'bold', marginTop: 8 },
+  email: { fontSize: 14, marginTop: 4 },
+  seccionTema: { padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 24 },
+  tituloSeccion: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+  subtituloSeccion: { fontSize: 13, marginBottom: 16 },
+  botonesTemaRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  btnTema: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, marginHorizontal: 4, borderWidth: 1, borderColor: '#cbd5e1' },
+  btnTemaActivo: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
+  btnTemaTexto: { fontSize: 13, fontWeight: '600', marginLeft: 6 },
+  btnTemaTextoActivo: { color: '#ffffff' },
+  botonCerrar: { flexDirection: 'row', backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  textoCerrar: { color: '#ef4444', fontSize: 16, fontWeight: 'bold' },
 });

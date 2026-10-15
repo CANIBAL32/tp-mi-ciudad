@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { estaConectado } from '../servicios/red'; // Ajustá la ruta según dónde tengas red.ts
+import { estaConectado } from '../servicios/red'; 
+import { TemaProvider, useTema } from '../contexto/TemaContext'; 
 
-// Componente del banner definido aquí mismo
+// Componente del banner de red
 function BannerRed() {
   const [online, setOnline] = useState<boolean>(true);
 
@@ -48,19 +49,26 @@ const stylesBanner = StyleSheet.create({
   },
 });
 
-// Layout Principal de la App
-export default function RootLayout() {
+// 📱 Componente interno para aplicar el tema dinámico al Stack
+function ContenidoLayout() {
+  const { colores, esOscuro } = useTema();
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colores.fondo }}>
       {/* Banner de alerta de red */}
       <BannerRed />
 
       {/* Navegador de pantallas */}
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: '#0284c7' },
+          headerStyle: {
+            backgroundColor: esOscuro ? '#1e293b' : '#0284c7', // Encabezado oscuro o azul
+          },
           headerTintColor: '#fff',
           headerTitleStyle: { fontWeight: 'bold' },
+          contentStyle: {
+            backgroundColor: colores.fondo, // Fondo dinámico para todas las pantallas
+          },
         }}
       >
         <Stack.Screen name="index" options={{ title: 'Mi Ciudad - Colón' }} />
@@ -71,5 +79,14 @@ export default function RootLayout() {
         <Stack.Screen name="perfil" options={{ title: 'Mi Perfil' }} />
       </Stack>
     </View>
+  );
+}
+
+// Layout Principal envuelto en el TemaProvider
+export default function RootLayout() {
+  return (
+    <TemaProvider>
+      <ContenidoLayout />
+    </TemaProvider>
   );
 }
