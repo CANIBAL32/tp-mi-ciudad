@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import { Ionicons } from '@expo/vector-icons'
 import { useTema } from '../../contexto/TemaContext'; 
 
 export default function LayoutTabs() {
@@ -59,7 +59,7 @@ export default function LayoutTabs() {
 
       {/* 📸 Pestaña 3: Mi Recorrido / QR */}
       <Tabs.Screen
-        name="mapa"
+        name="mirecorrido"
         options={{
           title: 'Mi recorrido',
           headerTitle: 'Mi Historial de Visitas',

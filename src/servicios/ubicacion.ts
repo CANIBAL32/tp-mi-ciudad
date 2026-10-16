@@ -12,7 +12,7 @@ export const COLON_CENTRO: Coordenadas = {
   longitud: -58.1428,
 };
 
-// 1. Solicitar permisos de GPS y obtener la posición actual del turista
+// 1. Solicitar permisos de GPS y obtener la posición del turista (Optimizado para rapidez)
 export async function obtenerUbicacionActual(): Promise<Coordenadas | null> {
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -21,9 +21,17 @@ export async function obtenerUbicacionActual(): Promise<Coordenadas | null> {
       return null; // Si niega el permiso, la app sigue funcionando
     }
 
-    const pos = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+    // ⚡ Intenta obtener primero la última ubicación conocida (Instantáneo < 50ms)
+    let pos = await Location.getLastKnownPositionAsync({});
+
+    // Si no hay una posición reciente en caché, consulta al GPS activo
+    if (!pos) {
+      pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+    }
+
+    if (!pos) return null;
 
     return {
       latitud: pos.coords.latitude,
@@ -76,4 +84,25 @@ export function abrirMapaNativo(lat: number, lng: number, nombreLugar: string) {
       console.error('Error al abrir la app de mapas:', err)
     );
   }
+}
+
+// 5. CalcularRumboGrados: Calcula el rumbo en grados desde el origen hacia el destino
+export function calcularRumboGrados(
+  origen: { latitud: number; longitud: number },
+  destino: { latitud: number; longitud: number }
+): number {
+  const RAD = Math.PI / 180;
+  const lat1 = origen.latitud * RAD;
+  const lat2 = destino.latitud * RAD;
+  const dLon = (destino.longitud - origen.longitud) * RAD;
+
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+  const rumboRadianes = Math.atan2(y, x);
+  const rumboGrados = (rumboRadianes * 180) / Math.PI;
+
+  return (rumboGrados + 360) % 360;
 }

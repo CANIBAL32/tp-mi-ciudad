@@ -28,5 +28,6 @@ export interface Lugar {
   horarios: Horario[];
   accesible: boolean;
   telefono: string | null;
+  sitioWeb?: string;
   audioguia: string | null;
 }

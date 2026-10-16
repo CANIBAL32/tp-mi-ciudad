@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { estaConectado } from '../servicios/red'; 
 import { TemaProvider, useTema } from '../contexto/TemaContext'; 
 
@@ -49,7 +49,7 @@ const stylesBanner = StyleSheet.create({
   },
 });
 
-// 📱 Componente interno para aplicar el tema dinámico al Stack
+// Componente interno para aplicar el tema dinámico al Stack
 function ContenidoLayout() {
   const { colores, esOscuro } = useTema();
 
@@ -58,26 +58,27 @@ function ContenidoLayout() {
       {/* Banner de alerta de red */}
       <BannerRed />
 
-      {/* Navegador de pantallas */}
+      {/* Navegador principal: Arranca SIEMPRE en (tabs) para permitir uso público */}
       <Stack
+        initialRouteName="(tabs)"
         screenOptions={{
           headerStyle: {
-            backgroundColor: esOscuro ? '#1e293b' : '#0284c7', // Encabezado oscuro o azul
+            backgroundColor: esOscuro ? '#1e293b' : '#0284c7',
           },
           headerTintColor: '#fff',
           headerTitleStyle: { fontWeight: 'bold' },
           contentStyle: {
-            backgroundColor: colores.fondo, // Fondo dinámico para todas las pantallas
+            backgroundColor: colores.fondo,
           },
         }}
       >
-        {/* 1. Grupo de pestañas principales (Tabs) */}
+        {/* 1. Pestañas públicas (Mapa, Catálogo, Agenda, Recorrido) */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-        {/* 2. Pantallas secundarias/modales fuera de las pestañas */}
+        {/* 2. Pantallas secundarias y modales */}
         <Stack.Screen name="lugar/[id]" options={{ title: 'Detalle del Atractivo' }} />
         <Stack.Screen name="favoritos" options={{ title: 'Mis Favoritos' }} />
-        <Stack.Screen name="login" options={{ title: 'Iniciar Sesión' }} />
+        <Stack.Screen name="login" options={{ title: 'Iniciar Sesión', presentation: 'modal' }} />
         <Stack.Screen name="registro" options={{ title: 'Crear Cuenta' }} />
       </Stack>
     </View>

@@ -15,6 +15,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { router } from 'expo-router';
+import { useTema } from '../contexto/TemaContext';
 
 // Servicios de autenticación
 import {
@@ -27,9 +28,6 @@ import {
   Usuario,
 } from '../servicios/autenticacion';
 
-// 🎨 Importamos el hook del Tema Global
-import { useTema } from '../contexto/TemaContext'; // Ajustá la ruta si está en '../contexto/TemaContext'
-
 const loginSchema = z.object({
   email: z.string().email('Ingresá un correo electrónico válido'),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
@@ -38,7 +36,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPantalla() {
-  const { colores } = useTema();
+  const { colores, esOscuro } = useTema();
 
   const [cargando, setCargando] = useState<boolean>(true);
   const [haySesion, setHaySesion] = useState<boolean>(false);
@@ -52,6 +50,7 @@ export default function LoginPantalla() {
     resolver: zodResolver(loginSchema),
   });
 
+  // Al abrir la pantalla, verificamos si ya hay un token en SecureStore
   useEffect(() => {
     verificarSesion();
   }, []);
@@ -63,9 +62,7 @@ export default function LoginPantalla() {
 
       if (token) {
         setHaySesion(true);
-        setUsuario(
-          datosUsuario || { nombre: 'Turista', email: 'turista@colon.gob.ar' }
-        );
+        setUsuario(datosUsuario || { nombre: 'Turista', email: 'turista@colon.gob.ar' });
       } else {
         setHaySesion(false);
       }
@@ -79,9 +76,10 @@ export default function LoginPantalla() {
   const onSubmit = async (data: LoginFormData) => {
     const usuarioGuardado = await obtenerUsuario();
 
+    // Verificamos si coincide el email Y la contraseña
     const esUsuarioRegistrado =
       usuarioGuardado &&
-      usuarioGuardado.email.toLowerCase() === data.email.toLowerCase() &&
+      data.email.toLowerCase() === usuarioGuardado.email.toLowerCase() &&
       (!usuarioGuardado.password || data.password === usuarioGuardado.password);
 
     const esCuentaDemo =
@@ -102,11 +100,11 @@ export default function LoginPantalla() {
       setUsuario({ nombre: nombreSesion, email: emailSesion });
 
       Alert.alert('¡Bienvenido/a!', `Sesión iniciada como ${nombreSesion}`);
-      router.replace('/');
+      router.replace('/perfil');
     } else {
       Alert.alert(
         'Error',
-        'Credenciales incorrectas. Verificá el correo y la contraseña.'
+        'Credenciales incorrectas. Usá turista@colon.gob.ar / 123456'
       );
     }
   };
@@ -114,13 +112,11 @@ export default function LoginPantalla() {
   const handleProbarBiometria = async () => {
     const exito = await autenticarConBiometria();
     if (exito) {
-      await guardarToken(`mock_jwt_token_${Date.now()}`);
+      await guardarToken('mock_jwt_token_12345');
       const datosUsuario = await obtenerUsuario();
       setHaySesion(true);
-      setUsuario(
-        datosUsuario || { nombre: 'Turista', email: 'turista@colon.gob.ar' }
-      );
-      router.replace('/');
+      setUsuario(datosUsuario || { nombre: 'Turista', email: 'turista@colon.gob.ar' });
+      router.replace('/perfil');
     }
   };
 
@@ -133,12 +129,7 @@ export default function LoginPantalla() {
 
   if (cargando) {
     return (
-      <View
-        style={[
-          styles.centerContainer,
-          { backgroundColor: colores.fondo },
-        ]}
-      >
+      <View style={[styles.centerContainer, { backgroundColor: colores.fondo }]}>
         <ActivityIndicator size="large" color="#0284c7" />
       </View>
     );
@@ -151,10 +142,7 @@ export default function LoginPantalla() {
         <View
           style={[
             styles.profileCard,
-            {
-              backgroundColor: colores.tarjetaFondo,
-              borderColor: colores.tarjetaBorde,
-            },
+            { backgroundColor: colores.tarjetaFondo, borderColor: colores.tarjetaBorde },
           ]}
         >
           <Text style={styles.avatar}>👤</Text>
@@ -167,31 +155,11 @@ export default function LoginPantalla() {
           <Text style={styles.statusBadge}>✓ Sesión Activa</Text>
         </View>
 
-        {/* Ir al Catálogo */}
-        <Pressable
-          style={styles.botonIngresar}
-          onPress={() => router.replace('/')}
-        >
-          <Text style={styles.botonTexto}>Ir al Catálogo de Atractivos</Text>
+        {/* Botón para ir a tu perfil */}
+        <Pressable style={styles.botonIngresar} onPress={() => router.replace('/perfil')}>
+          <Text style={styles.botonTexto}>Ir a Mi Perfil y Configuración</Text>
         </Pressable>
 
-        {/* Botón para ir a Mi Perfil / Preferencias */}
-        <Pressable
-          style={[
-            styles.botonPerfil,
-            {
-              backgroundColor: colores.tarjetaFondo,
-              borderColor: colores.tarjetaBorde,
-            },
-          ]}
-          onPress={() => router.push('/perfil')}
-        >
-          <Text style={[styles.botonTextoPerfil, { color: colores.textoPrincipal }]}>
-            ⚙️ Mi Perfil y Preferencias
-          </Text>
-        </Pressable>
-
-        {/* Cerrar Sesión */}
         <Pressable style={styles.botonCerrar} onPress={handleCerrarSesion}>
           <Text style={styles.botonTextoCerrar}>Cerrar Sesión</Text>
         </Pressable>
@@ -199,18 +167,13 @@ export default function LoginPantalla() {
     );
   }
 
-  //  Formulario de ingreso cuando NO hay sesión
+  // 🔑 Formulario de ingreso cuando NO hay sesión
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: colores.fondo }}
     >
-      <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          { backgroundColor: colores.fondo },
-        ]}
-      >
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colores.fondo }]}>
         <Text style={[styles.titulo, { color: colores.textoPrincipal }]}>
           Iniciar Sesión
         </Text>
@@ -231,10 +194,9 @@ export default function LoginPantalla() {
                 styles.input,
                 {
                   backgroundColor: colores.tarjetaFondo,
-                  borderColor: colores.tarjetaBorde,
+                  borderColor: erroresEmail ? '#ef4444' : colores.tarjetaBorde,
                   color: colores.textoPrincipal,
                 },
-                errors.email && styles.inputError,
               ]}
               placeholder="turista@colon.gob.ar"
               placeholderTextColor={colores.textoSecundario}
@@ -263,10 +225,9 @@ export default function LoginPantalla() {
                 styles.input,
                 {
                   backgroundColor: colores.tarjetaFondo,
-                  borderColor: colores.tarjetaBorde,
+                  borderColor: erroresPass ? '#ef4444' : colores.tarjetaBorde,
                   color: colores.textoPrincipal,
                 },
-                errors.password && styles.inputError,
               ]}
               placeholder="••••••"
               placeholderTextColor={colores.textoSecundario}
@@ -300,24 +261,50 @@ export default function LoginPantalla() {
           ]}
           onPress={handleProbarBiometria}
         >
-          <Text style={styles.botonTextoBiometria}>
+          <Text
+            style={[
+              styles.botonTextoBiometria,
+              { color: esOscuro ? '#38bdf8' : '#0284c7' },
+            ]}
+          >
             Ingresar con Huella / Rostro 👆
           </Text>
         </Pressable>
 
-        {/* Enlace a Crear Cuenta / Registro */}
+        {/* 🚀 Enlace a Crear Cuenta / Registro */}
         <View style={styles.footerRegistro}>
           <Text style={[styles.textoFooter, { color: colores.textoSecundario }]}>
             ¿No tenés una cuenta?{' '}
           </Text>
           <Pressable onPress={() => router.push('/registro')}>
-            <Text style={styles.linkRegistro}>Crear Cuenta</Text>
+            <Text
+              style={[
+                styles.linkRegistro,
+                { color: esOscuro ? '#38bdf8' : '#0284c7' },
+              ]}
+            >
+              Crear Cuenta
+            </Text>
           </Pressable>
         </View>
+
+        {/* 🚶 Continuar como invitado */}
+        <Pressable
+          style={{ marginTop: 20, alignItems: 'center', paddingVertical: 10 }}
+          onPress={() => router.replace('/(tabs)')}
+        >
+          <Text style={{ color: colores.textoSecundario, fontSize: 14, fontWeight: '500' }}>
+            ← Continuar explorando como invitado
+          </Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+
+// Variables auxiliares de validación para los estilos dinámicos de los inputs
+const erroresEmail = false;
+const erroresPass = false;
 
 const styles = StyleSheet.create({
   centerContainer: {
@@ -376,9 +363,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
   },
-  inputError: {
-    borderColor: '#ef4444',
-  },
   errorText: {
     color: '#ef4444',
     fontSize: 12,
@@ -396,17 +380,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  botonPerfil: {
-    borderWidth: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  botonTextoPerfil: {
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
   botonBiometria: {
     borderWidth: 1,
     paddingVertical: 14,
@@ -415,7 +388,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   botonTextoBiometria: {
-    color: '#0284c7',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -442,7 +414,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   linkRegistro: {
-    color: '#0284c7',
     fontSize: 14,
     fontWeight: 'bold',
   },
